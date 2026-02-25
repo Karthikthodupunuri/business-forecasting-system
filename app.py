@@ -6,7 +6,6 @@ from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import r2_score, mean_absolute_error
-from statsmodels.tsa.arima.model import ARIMA
 
 st.set_page_config(page_title="Business Intelligence System", layout="wide")
 
@@ -21,7 +20,6 @@ st.sidebar.header("📂 Upload Dataset")
 uploaded_sales = st.sidebar.file_uploader("Upload Sales CSV", type=["csv"])
 uploaded_price = st.sidebar.file_uploader("Upload Price CSV", type=["csv"])
 
-# Default fallback
 if uploaded_sales:
     sales_df = pd.read_csv(uploaded_sales)
 else:
@@ -36,37 +34,55 @@ else:
 # 🧭 NAVIGATION
 # ==============================
 
-page = st.sidebar.radio("Navigate", 
-                        ["Sales Forecast", 
-                         "Inventory Management", 
-                         "Price Prediction", 
-                         "Business Chatbot"])
+page = st.sidebar.radio(
+    "Navigate",
+    ["Sales Forecast", "Inventory Management", 
+     "Price Prediction", "Business Chatbot"]
+)
 
 # ==============================
-# 📈 SALES FORECAST PAGE
+# 📈 SALES FORECAST (LINEAR)
 # ==============================
 
 if page == "Sales Forecast":
 
-    st.header("📈 Sales Forecast (ARIMA Model)")
+    st.header("📈 Sales Forecast (Linear Regression)")
 
     sales_df["Date"] = pd.to_datetime(sales_df["Date"])
     sales_df = sales_df.sort_values("Date")
 
-    fig = px.line(sales_df, x="Date", y="Sales", title="Historical Sales")
+    sales_df["Day"] = np.arange(len(sales_df))
+
+    X = sales_df[["Day"]]
+    y = sales_df["Sales"]
+
+    model = LinearRegression()
+    model.fit(X, y)
+
+    y_pred = model.predict(X)
+
+    r2 = r2_score(y, y_pred)
+    mae = mean_absolute_error(y, y_pred)
+
+    col1, col2 = st.columns(2)
+    col1.metric("R² Score", round(r2,3))
+    col2.metric("MAE", round(mae,2))
+
+    fig = px.line(sales_df, x="Date", y="Sales",
+                  title="Historical Sales")
     st.plotly_chart(fig, use_container_width=True)
 
     st.subheader("Forecast Future Sales")
 
     forecast_days = st.slider("Select Forecast Days", 10, 120, 30)
 
-    model = ARIMA(sales_df["Sales"], order=(5,1,0))
-    model_fit = model.fit()
-
-    forecast = model_fit.forecast(steps=forecast_days)
+    future_days = np.arange(len(sales_df), len(sales_df)+forecast_days)
+    forecast = model.predict(future_days.reshape(-1,1))
 
     future_dates = pd.date_range(
-        sales_df["Date"].iloc[-1], periods=forecast_days+1, freq="D"
+        sales_df["Date"].iloc[-1],
+        periods=forecast_days+1,
+        freq="D"
     )[1:]
 
     forecast_df = pd.DataFrame({
@@ -77,8 +93,6 @@ if page == "Sales Forecast":
     fig2 = px.line(forecast_df, x="Date", y="Forecast",
                    title="Future Sales Forecast")
     st.plotly_chart(fig2, use_container_width=True)
-
-    st.success("ARIMA model used for time-series forecasting.")
 
 # ==============================
 # 📦 INVENTORY PAGE
@@ -105,7 +119,7 @@ elif page == "Inventory Management":
         st.success("Stock Level is Healthy.")
 
 # ==============================
-# 💰 PRICE PREDICTION PAGE
+# 💰 PRICE PREDICTION
 # ==============================
 
 elif page == "Price Prediction":
@@ -151,7 +165,7 @@ elif page == "Price Prediction":
         st.success(f"Recommended Price: ₹ {round(prediction[0],2)}")
 
 # ==============================
-# 🤖 BUSINESS CHATBOT PAGE
+# 🤖 BUSINESS CHATBOT
 # ==============================
 
 elif page == "Business Chatbot":
@@ -174,9 +188,11 @@ elif page == "Business Chatbot":
             response = f"Average Sales: {round(sales_df['Sales'].mean(),2)}"
 
         elif "forecast" in user_input:
-            model = ARIMA(sales_df["Sales"], order=(5,1,0))
-            model_fit = model.fit()
-            future = model_fit.forecast(steps=30)
+            future_days = np.arange(len(sales_df), len(sales_df)+30)
+            model = LinearRegression()
+            sales_df["Day"] = np.arange(len(sales_df))
+            model.fit(sales_df[["Day"]], sales_df["Sales"])
+            future = model.predict(future_days.reshape(-1,1))
             response = f"Next 30 Days Forecast Total: {round(sum(future),2)}"
 
         elif "best price" in user_input:
