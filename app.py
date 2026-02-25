@@ -1,227 +1,199 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly.graph_objects as go
+import plotly.express as px
 from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import r2_score, mean_absolute_error
-import re
+from statsmodels.tsa.arima.model import ARIMA
 
-st.set_page_config(page_title="Business Forecasting System", layout="wide")
+st.set_page_config(page_title="Business Intelligence System", layout="wide")
 
-# ===============================
-# SIDEBAR
-# ===============================
-st.sidebar.title("📌 Navigation")
-page = st.sidebar.radio("Go to", ["Sales Forecast", "Inventory Forecast", "Price Prediction"])
-theme = st.sidebar.radio("Theme", ["Dark", "Light"])
+st.title("📊 AI Business Intelligence Dashboard")
 
-template_style = "plotly_dark" if theme == "Dark" else "plotly_white"
+# ==============================
+# 📂 DATA UPLOAD SYSTEM
+# ==============================
 
+st.sidebar.header("📂 Upload Dataset")
 
-# ===============================
-# TRAIN FUNCTION
-# ===============================
-def train_model(df, column_name):
-    df["Days"] = np.arange(len(df))
-    X = df[["Days"]]
-    y = df[column_name]
+uploaded_sales = st.sidebar.file_uploader("Upload Sales CSV", type=["csv"])
+uploaded_price = st.sidebar.file_uploader("Upload Price CSV", type=["csv"])
 
-    model = LinearRegression()
-    model.fit(X, y)
+# Default fallback
+if uploaded_sales:
+    sales_df = pd.read_csv(uploaded_sales)
+else:
+    sales_df = pd.read_csv("sales_data.csv")
 
-    y_pred = model.predict(X)
+if uploaded_price:
+    price_df = pd.read_csv(uploaded_price)
+else:
+    price_df = pd.read_csv("price_data.csv")
+
+# ==============================
+# 🧭 NAVIGATION
+# ==============================
+
+page = st.sidebar.radio("Navigate", 
+                        ["Sales Forecast", 
+                         "Inventory Management", 
+                         "Price Prediction", 
+                         "Business Chatbot"])
+
+# ==============================
+# 📈 SALES FORECAST PAGE
+# ==============================
+
+if page == "Sales Forecast":
+
+    st.header("📈 Sales Forecast (ARIMA Model)")
+
+    sales_df["Date"] = pd.to_datetime(sales_df["Date"])
+    sales_df = sales_df.sort_values("Date")
+
+    fig = px.line(sales_df, x="Date", y="Sales", title="Historical Sales")
+    st.plotly_chart(fig, use_container_width=True)
+
+    st.subheader("Forecast Future Sales")
+
+    forecast_days = st.slider("Select Forecast Days", 10, 120, 30)
+
+    model = ARIMA(sales_df["Sales"], order=(5,1,0))
+    model_fit = model.fit()
+
+    forecast = model_fit.forecast(steps=forecast_days)
+
+    future_dates = pd.date_range(
+        sales_df["Date"].iloc[-1], periods=forecast_days+1, freq="D"
+    )[1:]
+
+    forecast_df = pd.DataFrame({
+        "Date": future_dates,
+        "Forecast": forecast
+    })
+
+    fig2 = px.line(forecast_df, x="Date", y="Forecast",
+                   title="Future Sales Forecast")
+    st.plotly_chart(fig2, use_container_width=True)
+
+    st.success("ARIMA model used for time-series forecasting.")
+
+# ==============================
+# 📦 INVENTORY PAGE
+# ==============================
+
+elif page == "Inventory Management":
+
+    st.header("📦 Inventory Management")
+
+    total_sales = sales_df["Sales"].sum()
+    avg_sales = sales_df["Sales"].mean()
+
+    col1, col2 = st.columns(2)
+    col1.metric("Total Sales", round(total_sales,2))
+    col2.metric("Average Sales", round(avg_sales,2))
+
+    st.subheader("Stock Status Simulation")
+
+    stock = st.number_input("Current Stock", min_value=0)
+
+    if stock < avg_sales:
+        st.error("⚠ Low Stock Warning!")
+    else:
+        st.success("Stock Level is Healthy.")
+
+# ==============================
+# 💰 PRICE PREDICTION PAGE
+# ==============================
+
+elif page == "Price Prediction":
+
+    st.header("💰 Smart Price Prediction")
+
+    X = price_df[["Cost", "Demand", "Competitor_Price"]]
+    y = price_df["Price"]
+
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+
+    model_option = st.selectbox(
+        "Choose Model",
+        ["Linear Regression", "Random Forest"]
+    )
+
+    if model_option == "Linear Regression":
+        model = LinearRegression()
+    else:
+        model = RandomForestRegressor(n_estimators=100)
+
+    model.fit(X_scaled, y)
+
+    y_pred = model.predict(X_scaled)
 
     r2 = r2_score(y, y_pred)
     mae = mean_absolute_error(y, y_pred)
 
-    return model, r2, mae
+    col1, col2 = st.columns(2)
+    col1.metric("R² Score", round(r2,3))
+    col2.metric("MAE", round(mae,2))
 
+    st.subheader("Enter Product Details")
 
-# ===============================
-# COMMON FORECAST FUNCTION
-# ===============================
-def forecast(model, df, future_days):
-    future_X = np.arange(len(df), len(df) + future_days).reshape(-1, 1)
-    predictions = model.predict(future_X)
-    return predictions
+    cost = st.number_input("Cost", min_value=0.0)
+    demand = st.number_input("Demand", min_value=0.0)
+    competitor = st.number_input("Competitor Price", min_value=0.0)
 
+    if st.button("Predict Price"):
+        input_data = scaler.transform([[cost, demand, competitor]])
+        prediction = model.predict(input_data)
+        st.success(f"Recommended Price: ₹ {round(prediction[0],2)}")
 
-# =========================================================
-# SALES PAGE
-# =========================================================
-if page == "Sales Forecast":
+# ==============================
+# 🤖 BUSINESS CHATBOT PAGE
+# ==============================
 
-    st.title("📊 Sales Forecast Dashboard")
+elif page == "Business Chatbot":
 
-    df = pd.read_csv("sales_data_500.csv")
-    df["Date"] = pd.to_datetime(df["Date"])
+    st.header("🤖 AI Business Assistant")
 
-    future_days = st.slider("Select Forecast Days", 10, 120, 50)
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = []
 
-    model, r2, mae = train_model(df, "Sales")
-    predictions = forecast(model, df, future_days)
-
-    future_dates = pd.date_range(df["Date"].iloc[-1], periods=future_days+1, freq="D")[1:]
-
-    # KPI
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Last Actual Sales", round(df["Sales"].iloc[-1], 2))
-    col2.metric("Next Day Prediction", round(predictions[0], 2))
-    col3.metric("Model R² Score", round(r2, 3))
-
-    # Graph Type
-    chart_type = st.selectbox(
-        "Visualization Type",
-        ["Line Chart", "Scatter Plot", "Area Chart"]
-    )
-
-    fig = go.Figure()
-
-    if chart_type == "Line Chart":
-        fig.add_trace(go.Scatter(x=df["Date"], y=df["Sales"],
-                                 mode='lines', name="Actual",
-                                 line=dict(color='blue', width=3)))
-    elif chart_type == "Scatter Plot":
-        fig.add_trace(go.Scatter(x=df["Date"], y=df["Sales"],
-                                 mode='markers', name="Actual",
-                                 marker=dict(color='blue')))
-    elif chart_type == "Area Chart":
-        fig.add_trace(go.Scatter(x=df["Date"], y=df["Sales"],
-                                 fill='tozeroy', mode='lines',
-                                 name="Actual",
-                                 line=dict(color='blue')))
-
-    fig.add_trace(go.Scatter(
-        x=future_dates,
-        y=predictions,
-        mode='lines',
-        name="Predicted",
-        line=dict(color='yellow', width=3, dash='dash')
-    ))
-
-    fig.update_layout(
-        title="Sales Forecast",
-        template=template_style
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
-
-    # Accuracy
-    st.subheader("📈 Model Performance")
-    st.write(f"R² Score: {round(r2,3)}")
-    st.write(f"MAE: {round(mae,2)}")
-
-    # Business Insight
-    st.subheader("📊 Business Insight")
-    increase = predictions[0] - df["Sales"].iloc[-1]
-    if increase > 0:
-        st.success(f"Sales expected to increase by {round(increase,2)} units.")
-    else:
-        st.warning(f"Sales expected to decrease by {round(abs(increase),2)} units.")
-
-    # Download
-    pred_df = pd.DataFrame({
-        "Future_Date": future_dates,
-        "Predicted_Sales": predictions
-    })
-
-    st.download_button("Download Forecast CSV",
-                       pred_df.to_csv(index=False),
-                       "sales_forecast.csv",
-                       "text/csv")
-
-    # Chatbot
-    st.subheader("🤖 Smart Assistant")
-    user_input = st.text_input("Ask: total sales next 20 days / average next 10 days")
+    user_input = st.text_input("Ask about sales, forecast, demand, price...")
 
     if user_input:
+
         user_input = user_input.lower()
-        numbers = re.findall(r'\d+', user_input)
 
-        if numbers:
-            days = int(numbers[0])
-            selected = predictions[:days]
+        if "total sales" in user_input:
+            response = f"Total Sales: {round(sales_df['Sales'].sum(),2)}"
 
-            if "average" in user_input:
-                st.success(f"Average: {round(np.mean(selected),2)}")
-            elif "max" in user_input:
-                st.success(f"Maximum: {round(np.max(selected),2)}")
-            elif "min" in user_input:
-                st.success(f"Minimum: {round(np.min(selected),2)}")
-            else:
-                st.success(f"Total: {round(np.sum(selected),2)}")
+        elif "average sales" in user_input:
+            response = f"Average Sales: {round(sales_df['Sales'].mean(),2)}"
+
+        elif "forecast" in user_input:
+            model = ARIMA(sales_df["Sales"], order=(5,1,0))
+            model_fit = model.fit()
+            future = model_fit.forecast(steps=30)
+            response = f"Next 30 Days Forecast Total: {round(sum(future),2)}"
+
+        elif "best price" in user_input:
+            response = f"Average Market Price: ₹ {round(price_df['Price'].mean(),2)}"
+
+        elif "high demand" in user_input:
+            max_demand = price_df.loc[price_df["Demand"].idxmax()]
+            response = f"Highest Demand Product Price: ₹ {max_demand['Price']}"
+
         else:
-            st.warning("Please include number of days.")
+            response = "I can help with sales, forecast, pricing and demand analysis."
 
+        st.session_state.chat_history.append(("You", user_input))
+        st.session_state.chat_history.append(("Bot", response))
 
-# =========================================================
-# INVENTORY PAGE (Same logic applied)
-# =========================================================
-elif page == "Inventory Forecast":
-
-    st.title("📦 Inventory Forecast Dashboard")
-
-    df = pd.read_csv("inventory_data_500.csv")
-    df["Date"] = pd.to_datetime(df["Date"])
-
-    future_days = st.slider("Select Forecast Days", 10, 120, 50)
-
-    model, r2, mae = train_model(df, "Inventory_Required")
-    predictions = forecast(model, df, future_days)
-
-    future_dates = pd.date_range(df["Date"].iloc[-1], periods=future_days+1, freq="D")[1:]
-
-    fig = go.Figure()
-
-    fig.add_trace(go.Scatter(x=df["Date"], y=df["Inventory_Required"],
-                             mode='lines',
-                             name="Actual",
-                             line=dict(color='blue')))
-
-    fig.add_trace(go.Scatter(x=future_dates, y=predictions,
-                             mode='lines',
-                             name="Predicted",
-                             line=dict(color='yellow', dash='dash')))
-
-    fig.update_layout(template=template_style)
-
-    st.plotly_chart(fig, use_container_width=True)
-
-    st.write(f"R² Score: {round(r2,3)} | MAE: {round(mae,2)}")
-
-
-# =========================================================
-# PRICE PAGE
-# =========================================================
-elif page == "Price Prediction":
-
-    st.title("💰 Price Prediction Dashboard")
-
-    df = pd.read_csv("price_data_500.csv")
-
-    X = df[["Cost_Price", "Demand", "Rating"]]
-    y = df["Selling_Price"]
-
-    model = LinearRegression()
-    model.fit(X, y)
-
-    cost = st.number_input("Cost Price", 100, 2000, 500)
-    demand = st.number_input("Demand", 50, 1000, 200)
-    rating = st.slider("Rating", 1.0, 5.0, 4.0)
-
-    if st.button("Predict"):
-        prediction = model.predict([[cost, demand, rating]])
-        st.success(f"Predicted Selling Price: {round(prediction[0],2)}")
-
-    fig = go.Figure()
-
-    fig.add_trace(go.Scatter(
-        y=df["Selling_Price"],
-        mode='lines',
-        name="Historical",
-        line=dict(color='blue')
-    ))
-
-    fig.update_layout(template=template_style)
-
-    st.plotly_chart(fig, use_container_width=True)
+    for sender, msg in st.session_state.chat_history:
+        if sender == "You":
+            st.write(f"🧑 {msg}")
+        else:
+            st.write(f"🤖 {msg}")
