@@ -13,7 +13,7 @@ st.set_page_config(page_title="Business Forecasting System", layout="wide")
 # ===============================
 st.sidebar.title("📌 Navigation")
 page = st.sidebar.radio("Go to", ["Sales Forecast", "Inventory Forecast", "Price Prediction"])
-theme = st.sidebar.radio("Theme", ["Dark", "Light"])
+theme = st.sidebar.radio("theme", ["Dark", "Light"])
 
 template_style = "plotly_dark" if theme == "Dark" else "plotly_white"
 
