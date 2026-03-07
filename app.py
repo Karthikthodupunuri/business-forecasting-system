@@ -112,8 +112,7 @@ if page == "Sales Forecast":
     ))
 
     fig.update_layout(
-        title="Sales Forecast",
-        template=template_style
+        title="Sales Forecast"
     )
 
     st.plotly_chart(fig, use_container_width=True)
