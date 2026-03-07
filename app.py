@@ -211,7 +211,6 @@ elif page == "Inventory Forecast":
         line=dict(dash='dash')
     ))
 
-    fig.update_layout(template=template_style)
 
     st.plotly_chart(fig, use_container_width=True)
 
@@ -257,6 +256,4 @@ elif page == "Price Prediction":
         mode='lines',
         name="Historical"
     ))
-    fig.update_layout(template=template_style)
-
     st.plotly_chart(fig, use_container_width=True)
